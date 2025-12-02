@@ -2,17 +2,18 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
+import matplotlib.pyplot as plt
 
-# -------------------------------
+# --------------------------------
 # TITLE
-# -------------------------------
+# --------------------------------
 st.title("🌍 Prediksi Kategori Kedalaman Gempa")
-st.write("Model menggunakan XGBoost (versi ringan untuk Streamlit Cloud)")
+st.write("Model menggunakan XGBoost (ringan & cepat di Streamlit Cloud)")
 
 
-# -------------------------------
+# --------------------------------
 # LOAD MODEL
-# -------------------------------
+# --------------------------------
 scaler = joblib.load("models/scaler.pkl")
 xgb_model = joblib.load("models/xgb_depth_class.pkl")
 
@@ -22,18 +23,20 @@ label_map = {
     2: "Deep (>300 km)"
 }
 
-# -------------------------------
+
+# --------------------------------
 # FUNGSI PREDIKSI
-# -------------------------------
+# --------------------------------
 def predict_depth(df):
     scaled = scaler.transform(df)
-    pred = xgb_model.predict(scaled)[0]
-    return label_map[pred]
+    proba = xgb_model.predict_proba(scaled)[0]  # Probabilitas tiap kelas
+    pred_class = np.argmax(proba)
+    return label_map[pred_class], proba
 
 
-# -------------------------------
-# INPUT MODE 1 – PREDIKSI DATA INDIVIDU
-# -------------------------------
+# --------------------------------
+# INPUT MODE 1 – PREDIKSI SATU DATA
+# --------------------------------
 st.header("🔎 Prediksi Kedalaman Gempa (Input Satu Data)")
 
 col1, col2 = st.columns(2)
@@ -53,7 +56,7 @@ with col2:
     year = st.number_input("Year", 2000, 2030, 2020)
 
 
-# Buat dataframe input
+# DataFrame input
 input_df = pd.DataFrame([[
     latitude, longitude, mag, gap, dmin,
     rms, herror, derror, magerr, year
@@ -65,16 +68,37 @@ input_df = pd.DataFrame([[
 st.write("📘 **Data Input Anda:**")
 st.dataframe(input_df)
 
+
+# --------------------------------
+# ACTION: PREDIKSI + GRAFIK
+# --------------------------------
 if st.button("Prediksi Kedalaman Gempa"):
-    result = predict_depth(input_df)
-    st.success(f"📌 **Hasil Prediksi: {result}**")
+    
+    hasil, proba = predict_depth(input_df)
+    st.success(f"📌 **Hasil Prediksi: {hasil}**")
+
+    # -----------------------------
+    # GRAFIK PROBABILITAS
+    # -----------------------------
+    st.subheader("📊 Grafik Probabilitas Kedalaman Gempa")
+
+    kelas = ["Shallow", "Intermediate", "Deep"]
+
+    fig, ax = plt.subplots()
+    bars = ax.bar(kelas, proba)
+
+    ax.set_ylabel("Probabilitas")
+    ax.set_title("Distribusi Probabilitas Prediksi")
+    ax.bar_label(bars, fmt="%.2f")
+
+    st.pyplot(fig)
 
 
-# -------------------------------
-# INPUT MODE 2 – RENTANG PARAMETER (SIDEBAR)
-# -------------------------------
+# --------------------------------
+# MODE RENTANG (SIDEBAR)
+# --------------------------------
 with st.sidebar:
-    st.header("📊 Prediksi Dengan Rentang Parameter")
+    st.header("📊 Prediksi Rentang Parameter")
 
     lat_range = st.slider("Latitude", -20.0, 20.0, (-10.0, 10.0))
     lon_range = st.slider("Longitude", 80.0, 150.0, (100.0, 120.0))
@@ -88,7 +112,6 @@ with st.sidebar:
     year_range = st.slider("Year", 2000, 2030, (2015, 2025))
 
     if st.button("Prediksi Dari Rentang"):
-        # Ambil nilai rata-rata dari range
         data_avg = pd.DataFrame([[
             np.mean(lat_range), np.mean(lon_range), np.mean(mag_range),
             np.mean(gap_range), np.mean(dmin_range), np.mean(rms_range),
@@ -99,9 +122,21 @@ with st.sidebar:
             "rms", "horizontal_error", "depth_error", "mag_error", "year"
         ])
 
-        depth_res = predict_depth(data_avg)
+        hasil_rentang, proba_rentang = predict_depth(data_avg)
 
         st.write("📘 **Data Rata-Rata Rentang:**")
         st.dataframe(data_avg)
 
-        st.success(f"📌 **Hasil Prediksi Rentang: {depth_res}**")
+        st.success(f"📌 **Prediksi Rentang: {hasil_rentang}**")
+
+        # Grafik probabilitas rentang
+        st.subheader("📊 Grafik Probabilitas (Dari Rentang)")
+
+        fig2, ax2 = plt.subplots()
+        bars2 = ax2.bar(kelas, proba_rentang)
+
+        ax2.set_ylabel("Probabilitas")
+        ax2.set_title("Distribusi Probabilitas Prediksi Rentang")
+        ax2.bar_label(bars2, fmt="%.2f")
+
+        st.pyplot(fig2)
