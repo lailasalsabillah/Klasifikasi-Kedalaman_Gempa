@@ -4,16 +4,15 @@ import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
 
-# --------------------------------
-# TITLE
-# --------------------------------
+# ===========================================
+# ✨ TITLE
+# ===========================================
 st.title("🌍 Prediksi Kategori Kedalaman Gempa")
-st.write("Model menggunakan XGBoost (versi ringan untuk Streamlit Cloud)")
+st.write("Model menggunakan XGBoost — Cepat, Akurat, dan Stabil di Streamlit Cloud.")
 
-
-# --------------------------------
-# LOAD MODEL
-# --------------------------------
+# ===========================================
+# 📌 LOAD MODEL
+# ===========================================
 scaler = joblib.load("models/scaler.pkl")
 xgb_model = joblib.load("models/xgb_depth_class.pkl")
 
@@ -23,20 +22,31 @@ label_map = {
     2: "Deep (>300 km)"
 }
 
+color_map = {
+    0: "blue",
+    1: "orange",
+    2: "red"
+}
 
-# --------------------------------
-# FUNGSI PREDIKSI
-# --------------------------------
+label_map_reverse = {
+    "Shallow (<70 km)": 0,
+    "Intermediate (70–300 km)": 1,
+    "Deep (>300 km)": 2
+}
+
+# ===========================================
+# 📌 FUNGSI PREDIKSI
+# ===========================================
 def predict_depth(df):
     scaled = scaler.transform(df)
     proba = xgb_model.predict_proba(scaled)[0]
     pred_class = np.argmax(proba)
-    return label_map[pred_class], proba
+    return label_map[pred_class], pred_class, proba
 
 
-# --------------------------------
-# INPUT MODE 1 – PREDIKSI SATU DATA
-# --------------------------------
+# ===========================================
+# 🔎 MODE 1 — PREDIKSI SATU DATA
+# ===========================================
 st.header("🔎 Prediksi Kedalaman Gempa (Input Satu Data)")
 
 col1, col2 = st.columns(2)
@@ -55,8 +65,7 @@ with col2:
     magerr = st.number_input("Magnitude Error", 0.0, 1.0, 0.1)
     year = st.number_input("Year", 2000, 2030, 2020)
 
-
-# DataFrame input
+# DF Input Tunggal
 input_df = pd.DataFrame([[
     latitude, longitude, mag, gap, dmin,
     rms, herror, derror, magerr, year
@@ -68,65 +77,54 @@ input_df = pd.DataFrame([[
 st.write("📘 **Data Input Anda:**")
 st.dataframe(input_df)
 
-
-# --------------------------------
-# PREDIKSI + GRAFIK PROBABILITAS + SCATTER
-# --------------------------------
 if st.button("Prediksi Kedalaman Gempa"):
 
-    hasil, proba = predict_depth(input_df)
-    st.success(f"📌 **Hasil Prediksi: {hasil}**")
+    hasil, pred_class, proba = predict_depth(input_df)
+    st.success(f"📌 **Kategori Gempa: {hasil}**")
 
-    # -----------------------------
-    # GRAFIK PROBABILITAS
-    # -----------------------------
-    st.subheader("📊 Grafik Probabilitas Kedalaman Gempa")
+    # ============================================================
+    # 📊 GRAFIK PROBABILITAS
+    # ============================================================
+    st.subheader("📊 Grafik Probabilitas Prediksi")
 
     kelas = ["Shallow", "Intermediate", "Deep"]
-
     fig, ax = plt.subplots()
-    bars = ax.bar(kelas, proba)
+    bars = ax.bar(kelas, proba, color=["blue", "orange", "red"])
 
     ax.set_ylabel("Probabilitas")
-    ax.set_title("Distribusi Probabilitas Prediksi")
+    ax.set_title("Distribusi Probabilitas")
     ax.bar_label(bars, fmt="%.2f")
-
     st.pyplot(fig)
 
-    # -----------------------------
-    # SCATTER PLOT LOKASI GEMPA
-    # -----------------------------
+    # ============================================================
+    # 📍 SCATTER PLOT SATU TITIK
+    # ============================================================
     st.subheader("📍 Scatter Plot Lokasi Gempa")
 
-    color_map = {
-        "Shallow (<70 km)": "blue",
-        "Intermediate (70–300 km)": "orange",
-        "Deep (>300 km)": "red"
-    }
-
     fig3, ax3 = plt.subplots(figsize=(6,4))
+
     ax3.scatter(
         input_df["longitude"],
         input_df["latitude"],
-        s=input_df["mag"] * 30,             # ukuran titik berdasarkan magnitude
-        c=color_map[hasil],
+        s=input_df["mag"] * 30,
+        c=color_map[pred_class],
         alpha=0.7,
         edgecolors="black"
     )
 
     ax3.set_xlabel("Longitude")
     ax3.set_ylabel("Latitude")
-    ax3.set_title("Scatter Plot Lokasi Gempa")
+    ax3.set_title("Lokasi Gempa Berdasarkan Input")
     ax3.grid(True)
 
     st.pyplot(fig3)
 
 
-# --------------------------------
-# MODE RENTANG (SIDEBAR)
-# --------------------------------
+# ===========================================
+# 🧮 MODE 2 — PREDIKSI RENTANG (SIDEBAR)
+# ===========================================
 with st.sidebar:
-    st.header("📊 Prediksi Rentang Parameter")
+    st.header("📊 Prediksi Dengan Rentang Parameter")
 
     lat_range = st.slider("Latitude", -20.0, 20.0, (-10.0, 10.0))
     lon_range = st.slider("Longitude", 80.0, 150.0, (100.0, 120.0))
@@ -151,7 +149,7 @@ with st.sidebar:
             "rms", "horizontal_error", "depth_error", "mag_error", "year"
         ])
 
-        hasil_rentang, proba_rentang = predict_depth(data_avg)
+        hasil_rentang, pred_class_rentang, proba_rentang = predict_depth(data_avg)
 
         st.write("📘 **Data Rata-Rata Rentang:**")
         st.dataframe(data_avg)
@@ -159,30 +157,95 @@ with st.sidebar:
         st.success(f"📌 **Prediksi Rentang: {hasil_rentang}**")
 
         # Grafik probabilitas rentang
-        st.subheader("📊 Grafik Probabilitas Rentang")
-
         fig2, ax2 = plt.subplots()
-        bars2 = ax2.bar(kelas, proba_rentang)
+        bars2 = ax2.bar(kelas, proba_rentang, color=["blue", "orange", "red"])
         ax2.set_ylabel("Probabilitas")
-        ax2.set_title("Distribusi Probabilitas Prediksi Rentang")
+        ax2.set_title("Distribusi Probabilitas Rentang")
         ax2.bar_label(bars2, fmt="%.2f")
         st.pyplot(fig2)
 
         # Scatter plot rentang
-        st.subheader("📍 Scatter Plot Lokasi Gempa (Rata-Rata Rentang)")
-
         fig4, ax4 = plt.subplots(figsize=(6,4))
         ax4.scatter(
             data_avg["longitude"], data_avg["latitude"],
             s=data_avg["mag"] * 30,
-            c=color_map[hasil_rentang],
+            c=color_map[pred_class_rentang],
             alpha=0.7,
             edgecolors="black"
         )
-
         ax4.set_xlabel("Longitude")
         ax4.set_ylabel("Latitude")
-        ax4.set_title("Scatter Plot Lokasi Gempa (Mean dari Rentang Input)")
+        ax4.set_title("Scatter Plot Lokasi (Mean dari Rentang Input)")
         ax4.grid(True)
-
         st.pyplot(fig4)
+
+
+# ===========================================
+# 📥 MODE 3 — UPLOAD CSV UNTUK PREDIKSI MASSAL
+# ===========================================
+st.header("📥 Upload CSV untuk Prediksi Banyak Data")
+
+uploaded_file = st.file_uploader("Upload file CSV:", type=["csv"])
+
+required_cols = [
+    "latitude", "longitude", "mag", "gap", "dmin",
+    "rms", "horizontal_error", "depth_error", "mag_error", "year"
+]
+
+if uploaded_file is not None:
+    try:
+        df_csv = pd.read_csv(uploaded_file)
+
+        st.subheader("📄 Preview CSV")
+        st.dataframe(df_csv.head())
+
+        # Cek kolom wajib
+        missing = [c for c in required_cols if c not in df_csv.columns]
+        if missing:
+            st.error(f"❌ CSV tidak memiliki kolom wajib: {missing}")
+        else:
+            st.success("✔ CSV valid!")
+
+            # Prediksi massal
+            scaled_csv = scaler.transform(df_csv[required_cols])
+            pred_classes = xgb_model.predict(scaled_csv)
+            pred_prob = xgb_model.predict_proba(scaled_csv)
+
+            df_csv["pred_class"] = pred_classes
+            df_csv["pred_label"] = df_csv["pred_class"].map(label_map)
+
+            st.subheader("📊 Hasil Prediksi CSV")
+            st.dataframe(df_csv)
+
+            # Scatter plot seluruh data CSV
+            st.subheader("📍 Scatter Plot Lokasi Gempa (CSV Upload)")
+
+            fig5, ax5 = plt.subplots(figsize=(6,4))
+
+            ax5.scatter(
+                df_csv["longitude"],
+                df_csv["latitude"],
+                s=df_csv["mag"] * 20,
+                c=[color_map[c] for c in pred_classes],
+                alpha=0.6,
+                edgecolors="black"
+            )
+
+            ax5.set_xlabel("Longitude")
+            ax5.set_ylabel("Latitude")
+            ax5.set_title("Lokasi Gempa Berdasarkan CSV Upload")
+            ax5.grid(True)
+
+            st.pyplot(fig5)
+
+            # Tombol download CSV hasil
+            csv_download = df_csv.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Download Hasil Prediksi CSV",
+                csv_download,
+                "hasil_prediksi_gempa.csv",
+                "text/csv"
+            )
+
+    except Exception as e:
+        st.error(f"❌ Terjadi error saat membaca CSV: {e}")
