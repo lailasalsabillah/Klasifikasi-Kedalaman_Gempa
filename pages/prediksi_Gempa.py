@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # ===========================================
 # ✨ TITLE
@@ -28,11 +29,11 @@ color_map = {
     2: "red"
 }
 
-label_map_reverse = {
-    "Shallow (<70 km)": 0,
-    "Intermediate (70–300 km)": 1,
-    "Deep (>300 km)": 2
-}
+# Kolom wajib untuk prediksi
+required_cols = [
+    "latitude", "longitude", "mag", "gap", "dmin",
+    "rms", "horizontal_error", "depth_error", "mag_error", "year"
+]
 
 # ===========================================
 # 📌 FUNGSI PREDIKSI
@@ -42,7 +43,6 @@ def predict_depth(df):
     proba = xgb_model.predict_proba(scaled)[0]
     pred_class = np.argmax(proba)
     return label_map[pred_class], pred_class, proba
-
 
 # ===========================================
 # 🔎 MODE 1 — PREDIKSI SATU DATA
@@ -69,10 +69,7 @@ with col2:
 input_df = pd.DataFrame([[
     latitude, longitude, mag, gap, dmin,
     rms, herror, derror, magerr, year
-]], columns=[
-    "latitude", "longitude", "mag", "gap", "dmin",
-    "rms", "horizontal_error", "depth_error", "mag_error", "year"
-])
+]], columns=required_cols)
 
 st.write("📘 **Data Input Anda:**")
 st.dataframe(input_df)
@@ -99,7 +96,7 @@ if st.button("Prediksi Kedalaman Gempa"):
     # ============================================================
     # 📍 SCATTER PLOT SATU TITIK
     # ============================================================
-    st.subheader("📍 Scatter Plot Lokasi Gempa")
+    st.subheader("📍 Scatter Plot Lokasi Gempa (Satu Data)")
 
     fig3, ax3 = plt.subplots(figsize=(6,4))
 
@@ -116,12 +113,11 @@ if st.button("Prediksi Kedalaman Gempa"):
     ax3.set_ylabel("Latitude")
     ax3.set_title("Lokasi Gempa Berdasarkan Input")
     ax3.grid(True)
-
     st.pyplot(fig3)
 
 
 # ===========================================
-# 🧮 MODE 2 — PREDIKSI RENTANG (SIDEBAR)
+# 🧮 MODE 2 — PREDIKSI RENTANG
 # ===========================================
 with st.sidebar:
     st.header("📊 Prediksi Dengan Rentang Parameter")
@@ -144,10 +140,7 @@ with st.sidebar:
             np.mean(gap_range), np.mean(dmin_range), np.mean(rms_range),
             np.mean(herror_range), np.mean(derror_range),
             np.mean(magerr_range), np.mean(year_range)
-        ]], columns=[
-            "latitude", "longitude", "mag", "gap", "dmin",
-            "rms", "horizontal_error", "depth_error", "mag_error", "year"
-        ])
+        ]], columns=required_cols)
 
         hasil_rentang, pred_class_rentang, proba_rentang = predict_depth(data_avg)
 
@@ -187,11 +180,6 @@ st.header("📥 Upload CSV untuk Prediksi Banyak Data")
 
 uploaded_file = st.file_uploader("Upload file CSV:", type=["csv"])
 
-required_cols = [
-    "latitude", "longitude", "mag", "gap", "dmin",
-    "rms", "horizontal_error", "depth_error", "mag_error", "year"
-]
-
 if uploaded_file is not None:
     try:
         df_csv = pd.read_csv(uploaded_file)
@@ -217,7 +205,9 @@ if uploaded_file is not None:
             st.subheader("📊 Hasil Prediksi CSV")
             st.dataframe(df_csv)
 
-            # Scatter plot seluruh data CSV
+            # ============================================================
+            # 📍 SCATTER PLOT CSV
+            # ============================================================
             st.subheader("📍 Scatter Plot Lokasi Gempa (CSV Upload)")
 
             fig5, ax5 = plt.subplots(figsize=(6,4))
@@ -235,8 +225,31 @@ if uploaded_file is not None:
             ax5.set_ylabel("Latitude")
             ax5.set_title("Lokasi Gempa Berdasarkan CSV Upload")
             ax5.grid(True)
-
             st.pyplot(fig5)
+
+            # ============================================================
+            # 🌋 HEATMAP INTENSITAS GEMPA
+            # ============================================================
+            st.subheader("🌋 Heatmap Intensitas Gempa (Magnitude-Based)")
+
+            fig_hm, ax_hm = plt.subplots(figsize=(7, 5))
+
+            sns.kdeplot(
+                x=df_csv["longitude"],
+                y=df_csv["latitude"],
+                weights=df_csv["mag"],
+                cmap="Reds",
+                bw_adjust=0.6,
+                fill=True,
+                thresh=0.05,
+                ax=ax_hm
+            )
+
+            ax_hm.set_title("Heatmap Intensitas Gempa")
+            ax_hm.set_xlabel("Longitude")
+            ax_hm.set_ylabel("Latitude")
+
+            st.pyplot(fig_hm)
 
             # Tombol download CSV hasil
             csv_download = df_csv.to_csv(index=False).encode("utf-8")
@@ -249,3 +262,42 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"❌ Terjadi error saat membaca CSV: {e}")
+
+
+# ===========================================
+# 📊 CONFUSION MATRIX + ACCURACY MODEL
+# ===========================================
+st.header("📊 Evaluasi Model (Confusion Matrix & Accuracy)")
+
+eval_file = st.file_uploader("Upload CSV dengan label asli (true_class):", type=["csv"], key="eval")
+
+if eval_file is not None:
+    try:
+        eval_df = pd.read_csv(eval_file)
+
+        if "true_class" not in eval_df.columns:
+            st.error("❌ CSV harus memiliki kolom 'true_class'")
+        else:
+            from sklearn.metrics import confusion_matrix, accuracy_score, ConfusionMatrixDisplay
+
+            # Prediksi ulang
+            scaled_eval = scaler.transform(eval_df[required_cols])
+            y_pred = xgb_model.predict(scaled_eval)
+            y_true = eval_df["true_class"]
+
+            # Accuracy
+            acc = accuracy_score(y_true, y_pred)
+            st.metric("📌 Accuracy Model", f"{acc * 100:.2f}%")
+
+            # Confusion Matrix
+            st.subheader("📊 Confusion Matrix")
+
+            fig_cm, ax_cm = plt.subplots(figsize=(6, 4))
+            cm = confusion_matrix(y_true, y_pred)
+            disp = ConfusionMatrixDisplay(cm, display_labels=list(label_map.values()))
+            disp.plot(ax=ax_cm, cmap="Blues", colorbar=True)
+
+            st.pyplot(fig_cm)
+
+    except Exception as e:
+        st.error(f"❌ Error evaluasi model: {e}")
