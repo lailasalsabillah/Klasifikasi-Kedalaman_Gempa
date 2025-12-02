@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 # TITLE
 # --------------------------------
 st.title("🌍 Prediksi Kategori Kedalaman Gempa")
-st.write("Model menggunakan XGBoost (ringan & cepat di Streamlit Cloud)")
+st.write("Model menggunakan XGBoost (versi ringan untuk Streamlit Cloud)")
 
 
 # --------------------------------
@@ -29,7 +29,7 @@ label_map = {
 # --------------------------------
 def predict_depth(df):
     scaled = scaler.transform(df)
-    proba = xgb_model.predict_proba(scaled)[0]  # Probabilitas tiap kelas
+    proba = xgb_model.predict_proba(scaled)[0]
     pred_class = np.argmax(proba)
     return label_map[pred_class], proba
 
@@ -70,10 +70,10 @@ st.dataframe(input_df)
 
 
 # --------------------------------
-# ACTION: PREDIKSI + GRAFIK
+# PREDIKSI + GRAFIK PROBABILITAS + SCATTER
 # --------------------------------
 if st.button("Prediksi Kedalaman Gempa"):
-    
+
     hasil, proba = predict_depth(input_df)
     st.success(f"📌 **Hasil Prediksi: {hasil}**")
 
@@ -92,6 +92,34 @@ if st.button("Prediksi Kedalaman Gempa"):
     ax.bar_label(bars, fmt="%.2f")
 
     st.pyplot(fig)
+
+    # -----------------------------
+    # SCATTER PLOT LOKASI GEMPA
+    # -----------------------------
+    st.subheader("📍 Scatter Plot Lokasi Gempa")
+
+    color_map = {
+        "Shallow (<70 km)": "blue",
+        "Intermediate (70–300 km)": "orange",
+        "Deep (>300 km)": "red"
+    }
+
+    fig3, ax3 = plt.subplots(figsize=(6,4))
+    ax3.scatter(
+        input_df["longitude"],
+        input_df["latitude"],
+        s=input_df["mag"] * 30,             # ukuran titik berdasarkan magnitude
+        c=color_map[hasil],
+        alpha=0.7,
+        edgecolors="black"
+    )
+
+    ax3.set_xlabel("Longitude")
+    ax3.set_ylabel("Latitude")
+    ax3.set_title("Scatter Plot Lokasi Gempa")
+    ax3.grid(True)
+
+    st.pyplot(fig3)
 
 
 # --------------------------------
@@ -112,6 +140,7 @@ with st.sidebar:
     year_range = st.slider("Year", 2000, 2030, (2015, 2025))
 
     if st.button("Prediksi Dari Rentang"):
+
         data_avg = pd.DataFrame([[
             np.mean(lat_range), np.mean(lon_range), np.mean(mag_range),
             np.mean(gap_range), np.mean(dmin_range), np.mean(rms_range),
@@ -130,13 +159,30 @@ with st.sidebar:
         st.success(f"📌 **Prediksi Rentang: {hasil_rentang}**")
 
         # Grafik probabilitas rentang
-        st.subheader("📊 Grafik Probabilitas (Dari Rentang)")
+        st.subheader("📊 Grafik Probabilitas Rentang")
 
         fig2, ax2 = plt.subplots()
         bars2 = ax2.bar(kelas, proba_rentang)
-
         ax2.set_ylabel("Probabilitas")
         ax2.set_title("Distribusi Probabilitas Prediksi Rentang")
         ax2.bar_label(bars2, fmt="%.2f")
-
         st.pyplot(fig2)
+
+        # Scatter plot rentang
+        st.subheader("📍 Scatter Plot Lokasi Gempa (Rata-Rata Rentang)")
+
+        fig4, ax4 = plt.subplots(figsize=(6,4))
+        ax4.scatter(
+            data_avg["longitude"], data_avg["latitude"],
+            s=data_avg["mag"] * 30,
+            c=color_map[hasil_rentang],
+            alpha=0.7,
+            edgecolors="black"
+        )
+
+        ax4.set_xlabel("Longitude")
+        ax4.set_ylabel("Latitude")
+        ax4.set_title("Scatter Plot Lokasi Gempa (Mean dari Rentang Input)")
+        ax4.grid(True)
+
+        st.pyplot(fig4)
